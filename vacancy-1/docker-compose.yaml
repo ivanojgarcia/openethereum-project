@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  validator:
+    image: openethereum/openethereum:latest
+    platform: linux/amd64 
+    env_file:
+      - .env
+    command: >
+      openethereum
+        --base-path /data
+        --chain dev
+        --jsonrpc-interface all
+        --jsonrpc-port 8545
+        --port 30303
+        --engine-signer ${VALIDATOR_ADDRESS}
+        --password /data/password.txt
+        --reseal-min-period 0
+        --reseal-max-period 1000
+    volumes:
+      - ./data/node0:/data
+    ports:
+      - "8545:8545"
+
+  nonvalidator1:
+    image: openethereum/openethereum:latest
+    platform: linux/amd64 
+    command: >
+      openethereum --base-path /data --chain dev \
+      --jsonrpc-interface all --jsonrpc-port 8546 --port 30304 --no-engine
+    volumes:
+      - ./data/node1:/data
+    depends_on:
+      - validator
+
+  nonvalidator2:
+    image: openethereum/openethereum:latest
+    platform: linux/amd64 
+    command: >
+      openethereum --base-path /data --chain dev \
+      --jsonrpc-interface all --jsonrpc-port 8547 --port 30305 --no-engine
+    volumes:
+      - ./data/node2:/data
+    depends_on:
+      - validator
+
+  rpc:
+    image: openethereum/openethereum:latest
+    platform: linux/amd64 
+    command: >
+      openethereum --base-path /data --chain dev \
+      --jsonrpc-interface all --jsonrpc-port 8548 \
+      --no-p2p --jsonrpc-apis web3,eth,net,parity
+    volumes:
+      - ./data/node3:/data
+    depends_on:
+      - validator

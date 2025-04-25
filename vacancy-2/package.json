@@ -1,0 +1,21 @@
+{
+  "name": "vacancy-2",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "smart-contract",
+    "hardhat"
+  ],
+  "author": "Ivano Junior Garcia",
+  "license": "ISC",
+  "description": "Enrollment Smart Contract (Hardhat)",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "^3.0.0",
+    "hardhat": "^2.23.0"
+  }
+}
