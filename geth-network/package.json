@@ -1,0 +1,37 @@
+{
+  "name": "geth-network",
+  "version": "1.0.0",
+  "description": "Private Ethereum network using Geth",
+  "type": "module",
+  "scripts": {
+    "generate-accounts": "NODE_OPTIONS='--loader ts-node/esm' ts-node scripts/generate-accounts.ts",
+    "setup-network": "NODE_OPTIONS='--loader ts-node/esm' ts-node scripts/setup-network.ts",
+    "export-accounts": "NODE_OPTIONS='--loader ts-node/esm' ts-node scripts/export-accounts-for-hardhat.ts",
+    "check-balances": "NODE_OPTIONS='--loader ts-node/esm' ts-node scripts/check-balances.ts",
+    "start": "docker-compose up -d",
+    "connect-nodes": "./scripts/init-nodes.sh",
+    "stop": "docker-compose down",
+    "restart": "docker-compose restart",
+    "logs": "docker-compose logs -f",
+    "clean": "docker-compose down && rm -rf data/node*/geth",
+    "full-setup": "npm run generate-accounts && npm run setup-network && npm run export-accounts && npm run start && sleep 10 && npm run connect-nodes",
+    "pos-setup": "./scripts/setup-pos-network.sh"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "docker",
+    "geth"
+  ],
+  "author": "Ivano Junior Garcia",
+  "license": "ISC",
+  "dependencies": {
+    "ethers": "^6.8.0",
+    "secp256k1": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}

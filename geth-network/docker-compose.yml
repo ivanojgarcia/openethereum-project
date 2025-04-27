@@ -1,0 +1,188 @@
+services:
+  bootnode:
+    image: ethereum/client-go:stable
+    container_name: eth-bootnode
+    command: 
+      - --datadir=/data
+      - --nodiscover
+      - --networkid=1337
+      - --nat=extip:172.16.239.10
+      - --netrestrict=172.16.239.0/24
+      - --port=30301
+      - --nodekey=/data/boot.key
+      - --verbosity=3
+    volumes:
+      - ./bootnode:/data
+    networks:
+      ethnet:
+        ipv4_address: 172.16.239.10
+
+  node0:
+    image: ethereum/client-go:stable
+    container_name: eth-node0
+    depends_on:
+      - bootnode
+    command:
+      - --datadir=/data
+      - --networkid=1337
+      - --nat=extip:172.16.239.11
+      - --netrestrict=172.16.239.0/24
+      - --port=30303
+      - --bootnodes=enode://${BOOTNODE_ID}@172.16.239.10:30301
+      - --unlock=${VALIDATOR_ADDRESS}
+      - --password=/data/password.txt
+      - --allow-insecure-unlock
+      - --mine
+      - --miner.etherbase=${VALIDATOR_ADDRESS}
+      - --verbosity=3
+      - --authrpc.addr=0.0.0.0
+      - --authrpc.port=8551
+      - --authrpc.vhosts=*
+      - --authrpc.jwtsecret=/data/jwtsecret
+    volumes:
+      - ./data/node0:/data
+    networks:
+      ethnet:
+        ipv4_address: 172.16.239.11
+    ports:
+      - "30303:30303"
+
+  node1:
+    image: ethereum/client-go:stable
+    container_name: eth-node1
+    depends_on:
+      - bootnode
+      - node0
+    command:
+      - --datadir=/data
+      - --networkid=1337
+      - --nat=extip:172.16.239.12
+      - --netrestrict=172.16.239.0/24
+      - --port=30303
+      - --bootnodes=enode://${BOOTNODE_ID}@172.16.239.10:30301
+      - --verbosity=3
+    volumes:
+      - ./data/node1:/data
+    networks:
+      ethnet:
+        ipv4_address: 172.16.239.12
+
+  node2:
+    image: ethereum/client-go:stable
+    container_name: eth-node2
+    depends_on:
+      - bootnode
+      - node0
+    command:
+      - --datadir=/data
+      - --networkid=1337
+      - --nat=extip:172.16.239.13
+      - --netrestrict=172.16.239.0/24
+      - --port=30303
+      - --bootnodes=enode://${BOOTNODE_ID}@172.16.239.10:30301
+      - --verbosity=3
+    volumes:
+      - ./data/node2:/data
+    networks:
+      ethnet:
+        ipv4_address: 172.16.239.13
+
+  rpc:
+    image: ethereum/client-go:stable
+    container_name: eth-rpc
+    depends_on:
+      - bootnode
+      - node0
+    command:
+      - --datadir=/data
+      - --networkid=1337
+      - --nat=extip:172.16.239.14
+      - --netrestrict=172.16.239.0/24
+      - --port=30303
+      - --bootnodes=enode://${BOOTNODE_ID}@172.16.239.10:30301
+      - --http
+      - --http.addr=0.0.0.0
+      - --http.port=8545
+      - --http.corsdomain=*
+      - --http.vhosts=*
+      - --http.api=eth,net,web3,personal,miner,admin,clique
+      - --ws
+      - --ws.addr=0.0.0.0
+      - --ws.port=8546
+      - --ws.origins=*
+      - --ws.api=eth,net,web3,personal,miner,admin,clique
+      - --verbosity=3
+    volumes:
+      - ./data/node3:/data
+    networks:
+      ethnet:
+        ipv4_address: 172.16.239.14
+    ports:
+      - "8645:8545"
+      - "8646:8546"
+
+  # Servicio de Beacon Node (Lighthouse)
+  beacon:
+    image: sigp/lighthouse:latest
+    container_name: eth-beacon
+    depends_on:
+      - node0
+    command:
+      - lighthouse
+      - bn
+      - --datadir=/data
+      - --network=mainnet
+      - --staking
+      - --execution-endpoint=http://172.16.239.11:8551
+      - --execution-jwt=/data/jwtsecret
+      - --http
+      - --http-address=0.0.0.0
+      - --http-port=5052
+      - --metrics
+      - --metrics-address=0.0.0.0
+      - --metrics-port=5054
+      - --enr-udp-port=9000
+      - --enr-tcp-port=9000
+      - --discovery-port=9000
+      - --target-peers=10
+      - --terminal-total-difficulty-override=0
+      - --checkpoint-sync-url=
+      - --genesis-state-url=
+    volumes:
+      - ./consensus-data:/data
+      - ./data/node0/jwtsecret:/data/jwtsecret
+    networks:
+      ethnet:
+        ipv4_address: 172.16.239.20
+    ports:
+      - "5052:5052"
+      - "5054:5054"
+      - "9000:9000/udp"
+      - "9000:9000/tcp"
+
+  # Servicio de Validator (Lighthouse)
+  validator:
+    image: sigp/lighthouse:latest
+    container_name: eth-validator
+    depends_on:
+      - beacon
+    command:
+      - lighthouse
+      - vc
+      - --validators-dir=/data/validators
+      - --beacon-nodes=http://172.16.239.20:5052
+      - --graffiti=private-network
+      - --suggested-fee-recipient=${VALIDATOR_ADDRESS}
+      - --password-file=/data/validator_password.txt
+    volumes:
+      - ./consensus-data:/data
+    networks:
+      ethnet:
+        ipv4_address: 172.16.239.21
+
+networks:
+  ethnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.239.0/24 

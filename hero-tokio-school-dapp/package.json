@@ -1,21 +1,28 @@
 {
-  "name": "vacancy-2",
+  "name": "hero-tokio-school-dapp",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
+    "smart contracts",
     "blockchain",
+    "solidity",
     "ethereum",
-    "smart-contract",
-    "hardhat"
+    "web3",
+    "typescript",
+    "nodejs"
   ],
   "author": "Ivano Junior Garcia",
   "license": "ISC",
-  "description": "Enrollment Smart Contract (Hardhat)",
+  "description": "backend to develop and deploy the smart contracts for the hero tokio school dapp",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox-viem": "^3.0.0",
     "hardhat": "^2.23.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.3.0",
+    "dotenv": "^16.5.0"
   }
 }
