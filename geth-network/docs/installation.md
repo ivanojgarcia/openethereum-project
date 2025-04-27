@@ -1,201 +1,285 @@
 # Guía de Instalación de la Red Ethereum Privada
 
-Esta guía detalla los pasos necesarios para desplegar y configurar una red Ethereum privada basada en Geth utilizando Docker.
+Esta guía detalla los pasos necesarios para desplegar y configurar una red Ethereum privada basada en Geth utilizando Docker, con soporte para Proof of Stake (PoS).
 
 ## Requisitos Previos
 
 - Docker (versión 20.10.0 o superior)
-- Docker Compose (versión 1.29.0 o superior)
+- Docker Compose (versión 2.0.0 o superior)
+- Node.js (v16.0.0 o superior)
 - Git
-- 4GB de RAM mínimo (8GB recomendado)
-- 20GB de espacio libre en disco
+- 8GB de RAM mínimo (16GB recomendado para configuración completa con cliente de consenso)
+- 50GB de espacio libre en disco (SSD recomendado)
+
+## Modos de Instalación
+
+Esta red Ethereum privada puede configurarse en dos modos principales:
+
+1. **Modo PoS sin cliente de consenso**: Ideal para desarrollo y pruebas. No genera nuevos bloques, pero permite interactuar con smart contracts en el bloque génesis.
+
+2. **Modo PoS completo con cliente de consenso**: Configuración completa con Lighthouse como cliente de consenso y validadores. Genera bloques nuevos periódicamente.
 
 ## Instalación Rápida
 
-Para una instalación rápida utilizando la configuración predeterminada:
+### Modo PoS sin Cliente de Consenso (Recomendado para Desarrollo)
 
 ```bash
 # 1. Clonar el repositorio
-git clone https://github.com/tu-usuario/geth-network.git
-cd geth-network
+git clone https://github.com/tu-usuario/tokio-school-final-project.git
+cd tokio-school-final-project/geth-network
 
-# 2. Ejecutar el script de despliegue
-./setup.sh
+# 2. Instalar dependencias
+npm install
+
+# 3. Configuración completa automatizada
+npm run full-setup
+
+# 4. Verificar que la red está funcionando
+curl -X POST http://localhost:8645 \
+  -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+
+### Modo PoS Completo con Cliente de Consenso
+
+```bash
+# 1. Clonar el repositorio
+git clone https://github.com/tu-usuario/tokio-school-final-project.git
+cd tokio-school-final-project/geth-network
+
+# 2. Instalar dependencias
+npm install
+
+# 3. Configuración completa con cliente de consenso
+npm run pos-setup
+
+# 4. Verificar que la red está funcionando
+curl -X POST http://localhost:8645 \
+  -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
 ```
 
 ## Instalación Manual Paso a Paso
 
-### 1. Clonar el Repositorio
+Para entender mejor el proceso o personalizar la instalación, sigue estos pasos:
+
+### 1. Preparación del Entorno
 
 ```bash
-git clone https://github.com/tu-usuario/geth-network.git
-cd geth-network
+# Clonar el repositorio
+git clone https://github.com/tu-usuario/tokio-school-final-project.git
+cd tokio-school-final-project/geth-network
+
+# Instalar dependencias
+npm install
+
+# Limpiar cualquier configuración anterior
+npm run clean
 ```
 
-### 2. Configurar el Archivo Genesis
-
-El archivo genesis.json ya está preconfigurado, pero puedes revisarlo y ajustarlo según tus necesidades:
+### 2. Generar Cuentas y JWT Secret
 
 ```bash
-cat genesis.json
+# Generar cuentas para los nodos
+npm run generate-accounts
+
+# Generar JWT secret para la comunicación entre cliente de ejecución y consenso
+./scripts/generate-jwt.sh
 ```
 
-### 3. Generar el Archivo de Configuración del Bootnode
+### 3. Configurar el Archivo Genesis
+
+El archivo genesis.template.json ya está configurado para PoS, pero puedes revisarlo:
 
 ```bash
-# Genera una clave para el bootnode 
-docker run --rm -v $PWD/bootnode:/data ethereum/client-go:alltools-stable bootnode -genkey /data/boot.key
+# Ver la plantilla del genesis
+cat genesis.template.json
 
-# Obtén el enode URL (lo necesitarás para la configuración de otros nodos)
-docker run --rm -v $PWD/bootnode:/data ethereum/client-go:alltools-stable bootnode -nodekey /data/boot.key -writeaddress
+# Generar el archivo genesis final con las cuentas generadas
+npm run setup-network
 ```
 
-### 4. Inicializar los Nodos
+### 4. Configurar Cliente de Consenso (opcional)
+
+Para el modo PoS completo, necesitas generar claves de validador:
 
 ```bash
-# Inicializar los directorios de datos para cada nodo con el bloque genesis
-for node in node1 node2 validator rpc; do
-  mkdir -p $node
-  docker run --rm -v $PWD/$node:/data -v $PWD/genesis.json:/genesis.json \
-    ethereum/client-go:stable --datadir /data init /genesis.json
-done
+# Generar claves para validadores
+./scripts/generate-validator-keys.sh
 ```
 
-### 5. Configurar los Nodos Validadores
+### 5. Exportar Cuentas para Hardhat
 
 ```bash
-# Crear cuenta para el validador
-docker run --rm -v $PWD/validator:/data ethereum/client-go:stable \
-  --datadir /data account new --password /dev/null
+# Exportar cuentas y claves privadas para usar con herramientas de desarrollo
+npm run export-accounts
 ```
 
-Toma nota de la dirección generada y agrégala al archivo `static-nodes.json` que utilizarás en el siguiente paso.
-
-### 6. Crear el Archivo de Configuración de Nodos Estáticos
-
-Crea un archivo `static-nodes.json` en cada directorio de nodo:
+### 6. Iniciar la Red
 
 ```bash
-for node in node1 node2 validator rpc; do
-  cat > $node/static-nodes.json << EOL
-[
-  "enode://BOOTNODE_ENODE_ID@bootnode:30301",
-  "enode://NODE1_ENODE_ID@node1:30303",
-  "enode://NODE2_ENODE_ID@node2:30303",
-  "enode://VALIDATOR_ENODE_ID@validator:30303"
-]
-EOL
-done
+# Arrancar todos los servicios
+npm run start
+
+# Verificar que los servicios están en funcionamiento
+docker ps
 ```
 
-Reemplaza los ID de enode con los valores reales generados para cada nodo.
-
-### 7. Configurar Docker Compose
-
-El archivo `docker-compose.yml` ya está configurado, pero puedes revisarlo para asegurarte de que se ajusta a tus necesidades:
+### 7. Conectar los Nodos
 
 ```bash
-cat docker-compose.yml
+# Conectar los nodos entre sí
+npm run connect-nodes
 ```
 
-### 8. Iniciar la Red
+### 8. Verificar la Instalación
 
 ```bash
-docker-compose up -d
+# Comprobar los balances de las cuentas predefinidas
+npm run check-balances
+
+# Ver los logs de los nodos
+npm run logs
 ```
 
-### 9. Verificar el Funcionamiento
+## Estructura de Directorios
 
-```bash
-# Comprobar que todos los contenedores están en ejecución
-docker-compose ps
+Tras la instalación, se crearán los siguientes directorios:
 
-# Verificar los logs de algún nodo
-docker logs -f geth-node1
+```
+geth-network/
+├── bootnode/             # Datos del bootnode
+│   ├── boot.key          # Clave privada del bootnode
+│   └── boot.id           # ID del bootnode
+├── data/                 # Datos de los nodos
+│   ├── node0/            # Nodo principal/validador
+│   │   └── keystore/     # Claves de las cuentas
+│   ├── node1/            # Nodo adicional
+│   ├── node2/            # Nodo adicional
+│   └── rpc/              # Nodo con API RPC habilitada
+├── consensus-data/       # Datos para el cliente de consenso (si está habilitado)
+│   ├── validator_keys/   # Claves del validador
+│   └── jwtsecret         # JWT secret para comunicación Engine API
+└── .env                  # Variables de entorno generadas
 ```
 
-### 10. Configurar la Cuenta Principal
+## Personalización
 
-```bash
-# Crear una cuenta con fondos iniciales (en el nodo RPC)
-docker exec -it geth-rpc geth --exec "personal.newAccount('password')" attach /data/geth.ipc
-```
+### Configurar Parámetros del Genesis
 
-## Configuración Personalizada
+El bloque génesis puede personalizarse editando `genesis.template.json` antes de ejecutar `npm run setup-network`. Los principales parámetros son:
 
-### Modificar el Bloque Genesis
+- `chainId`: ID de la cadena (predeterminado: 1337)
+- `gasLimit`: Límite de gas por bloque
+- Balances iniciales en la sección `alloc`
 
-Si deseas personalizar la configuración del bloque genesis:
+### Ajustar Docker Compose
 
-1. Edita el archivo `genesis.json` según tus necesidades
-2. Detén todos los nodos: `docker-compose down`
-3. Elimina los datos existentes: `rm -rf node*/geth`
-4. Vuelve a inicializar los nodos con el nuevo genesis (paso 4 de la instalación manual)
-5. Reinicia la red: `docker-compose up -d`
+Para modificar la configuración de los contenedores, edita `docker-compose.yml`. Puedes:
 
-### Ajustar Parámetros de Red
-
-Para modificar los parámetros de red, edita el archivo `docker-compose.yml` y ajusta los comandos de inicio de los nodos. Puedes modificar:
-
-- `--networkid`: El ID de la red (predeterminado: 1337)
-- `--targetgaslimit`: El límite objetivo de gas por bloque
-- `--gasprice`: El precio mínimo de gas aceptado
-- `--txpool.pricelimit`: El precio mínimo para la admisión de transacciones en el pool
-- `--txpool.accountslots`: Número máximo de transacciones ejecutables por cuenta
-
-### Configurar Límites de Recursos
-
-Para limitar los recursos asignados a cada contenedor, agrega secciones de `deploy` y `resources` al archivo `docker-compose.yml`:
-
-```yaml
-services:
-  geth-node1:
-    # ... configuración existente ...
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-```
+- Cambiar la versión de Geth
+- Modificar los parámetros de red (puertos, volúmenes)
+- Ajustar los recursos asignados a cada contenedor
 
 ## Solución de Problemas
 
-### Los Nodos No Se Conectan Entre Sí
+### Los Nodos No Se Conectan
 
-1. Verifica que los enodes en `static-nodes.json` sean correctos
-2. Comprueba que el bootnode esté funcionando: `docker logs geth-bootnode`
-3. Asegúrate de que los puertos estén correctamente mapeados en `docker-compose.yml`
+1. Verifica que el bootnode esté funcionando correctamente:
+   ```bash
+   docker logs bootnode
+   ```
 
-### Errores de Genesis
+2. Comprueba la conectividad entre nodos:
+   ```bash
+   docker exec eth-node0 geth --exec "admin.peers" attach /data/geth.ipc
+   ```
 
-Si aparecen errores relacionados con el bloque genesis:
+### Error en el JWT Secret
 
-1. Asegúrate de que todos los nodos utilizan exactamente el mismo archivo `genesis.json`
-2. Reinicia desde cero eliminando todos los datos: `rm -rf node*/geth`
+Si hay problemas de comunicación con el cliente de consenso:
 
-### Problemas con el Consenso PoA
+1. Verifica que el JWT secret sea idéntico en ambos clientes:
+   ```bash
+   cat ./data/node0/jwtsecret
+   cat ./consensus-data/jwtsecret
+   ```
 
-Si el consenso no funciona correctamente:
+2. Regenera el JWT secret si es necesario:
+   ```bash
+   ./scripts/generate-jwt.sh
+   ```
 
-1. Verifica que la dirección del validador esté correctamente incluida en el arreglo `extradata` del archivo `genesis.json`
-2. Comprueba que el nodo validador esté minando: `docker exec -it geth-validator geth --exec "eth.mining" attach /data/geth.ipc`
+### El Cliente de Consenso No Sincroniza
 
-## Actualización de la Red
+Si el cliente Lighthouse no sincroniza con el cliente de ejecución:
 
-Para actualizar la versión de Geth:
+1. Verifica que el Engine API esté habilitado y accesible:
+   ```bash
+   curl -X POST http://localhost:8551 \
+     -H "Content-Type: application/json" \
+     --data '{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":1}'
+   ```
 
-1. Modifica la versión en `docker-compose.yml` (por ejemplo, cambia `ethereum/client-go:stable` a `ethereum/client-go:v1.10.13`)
-2. Reconstruye y reinicia los contenedores:
+2. Revisa los logs del cliente beacon:
+   ```bash
+   docker logs beacon
+   ```
+
+## Interacción con la Red
+
+### Conectar Metamask
+
+1. Abrir Metamask y añadir una nueva red:
+   - **Nombre de red**: Tokio School PoS
+   - **URL de RPC**: http://localhost:8645
+   - **Chain ID**: 1337
+   - **Símbolo**: ETH
+
+2. Importar una de las cuentas predefinidas usando su clave privada (disponible en el archivo generado por `npm run export-accounts`).
+
+### Usar con Hardhat
+
+Configura tu proyecto Hardhat para conectarse a la red local:
+
+```typescript
+// hardhat.config.ts
+require('dotenv').config({ path: './.env.keys' });
+
+module.exports = {
+  networks: {
+    local: {
+      url: "http://localhost:8645",
+      accounts: process.env.PRIVATE_KEYS.split(','),
+      chainId: 1337
+    }
+  }
+};
+```
+
+## Mantenimiento
+
+### Detener la Red
 
 ```bash
-docker-compose down
-docker-compose pull
-docker-compose up -d
+npm run stop
+```
+
+### Reiniciar la Red
+
+```bash
+npm run restart
+```
+
+### Limpiar Todos los Datos
+
+```bash
+npm run clean
 ```
 
 ## Próximos Pasos
 
-- Conectar [MetaMask](./commands.md#integración-con-metamask) a la red privada
-- Desplegar [contratos inteligentes de prueba](./commands.md#desplegar-un-contrato-inteligente-sencillo)
-- Explorar la [arquitectura de la red](./network-architecture.md) en detalle
-- Consultar [comandos útiles](./commands.md) para interactuar con la red 
+- Consulta la [Guía de Configuración](./configuration.md) para más opciones avanzadas
+- Explora la [Arquitectura de Red](./network-architecture.md) para entender los componentes
+- Revisa los [Comandos Útiles](./commands.md) para interactuar con la red
+- Integra la red con el proyecto [Hero Tokio School DApp](../hero-tokio-school-dapp/) 

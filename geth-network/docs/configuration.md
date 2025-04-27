@@ -1,12 +1,12 @@
 # Guía de Configuración de la Red Ethereum Privada
 
-Este documento describe las opciones de configuración disponibles para personalizar la red Ethereum privada basada en Geth.
+Este documento describe las opciones de configuración disponibles para personalizar la red Ethereum privada basada en Geth y cliente de consenso Lighthouse.
 
 ## Configuración del Genesis Block
 
-El archivo `genesis.json` en la raíz del proyecto define la configuración inicial de la blockchain. Este archivo es crítico y debe configurarse antes de iniciar la red por primera vez.
+El archivo `genesis.json` en la raíz del proyecto define la configuración inicial de la blockchain. Este archivo es crítico y debe configurarse correctamente antes de iniciar la red por primera vez.
 
-### Parámetros Principales
+### Parámetros Principales para Geth en Modo PoS
 
 ```json
 {
@@ -22,13 +22,12 @@ El archivo `genesis.json` en la raíz del proyecto define la configuración inic
     "istanbulBlock": 0,
     "berlinBlock": 0,
     "londonBlock": 0,
-    "clique": {
-      "period": 5,
-      "epoch": 30000
-    }
+    "shanghaiTime": 0,
+    "terminalTotalDifficulty": 0,
+    "terminalTotalDifficultyPassed": true
   },
   "difficulty": "1",
-  "gasLimit": "8000000",
+  "gasLimit": "30000000",
   "extradata": "0x0000000000000000000000000000000000000000000000000000000000000000<VALIDATOR_ADDRESS>0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
   "alloc": {
     "<PREFUNDED_ADDRESS>": {
@@ -38,16 +37,43 @@ El archivo `genesis.json` en la raíz del proyecto define la configuración inic
 }
 ```
 
-### Explicación de los Parámetros
+### Parámetros PoS Específicos
 
 | Parámetro | Descripción | Valores Recomendados |
 |-----------|-------------|----------------------|
-| `chainId` | Identificador único de la red | 1337 para desarrollo, cualquier valor no utilizado por redes públicas |
-| `period` | Tiempo objetivo entre bloques (segundos) | 5-15 para desarrollo, >5 para producción |
-| `epoch` | Número de bloques tras los cuales se aplican reglas de votación | 30000 (valor por defecto) |
-| `gasLimit` | Límite máximo de gas por bloque | 8000000 - 30000000 |
-| `extradata` | Dirección del validador inicial (con padding) | Formato: 0x + 32 bytes zeros + dirección validador de 20 bytes + 65 bytes zeros |
-| `alloc` | Cuentas pre-financiadas y sus balances | Direcciones de prueba con balances en wei |
+| `terminalTotalDifficulty` | Dificultad total en la que ocurre la fusión (The Merge) | 0 para empezar directamente en PoS |
+| `terminalTotalDifficultyPassed` | Indica si ya se superó TTD | true para comenzar directamente en PoS |
+| `shanghaiTime` | Timestamp para activar Shanghai | 0 para activar inmediatamente |
+
+### Configuración para Clientes de Consenso
+
+Para configuraciones que incluyen cliente de consenso (Lighthouse), se requiere un archivo de configuración de genesis adicional:
+
+```json
+{
+  "config": {
+    "chainId": 1337,
+    "forkConfig": {
+      "genesisTime": UNIX_TIMESTAMP,
+      "genesisForkVersion": "0x00000000",
+      "genesisValidatorsRoot": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "depositContract": {
+      "address": "0x0000000000000000000000000000000000000000",
+      "chainId": 1337
+    }
+  }
+}
+```
+
+## JWT Secret
+
+Las actuales implementaciones de Ethereum requieren un JWT secret compartido entre el cliente de ejecución (Geth) y el cliente de consenso (Lighthouse). Este secreto debe ser idéntico en ambos clientes:
+
+```bash
+# Generar JWT secret
+openssl rand -hex 32 > jwtsecret
+```
 
 ## Configuración de Nodos
 
@@ -57,7 +83,7 @@ Cada nodo en la red puede personalizarse editando su sección correspondiente en
 
 ```yaml
 bootnode:
-  image: ethereum/client-go:stable
+  image: ethereum/client-go:v1.15.0
   command: >
     --nodekeyhex=<NODE_KEY_HEX>
     --netrestrict=172.16.254.0/24
@@ -77,40 +103,11 @@ bootnode:
 | `nodiscover` | Deshabilita descubrimiento automático | true para redes privadas |
 | `maxpeers` | Número máximo de conexiones | 25-100 dependiendo de la escala |
 
-### Validator Node
+### Execution Node (Geth)
 
 ```yaml
-validator:
-  image: ethereum/client-go:stable
-  command: >
-    --datadir=/data
-    --port=30303
-    --bootnodes=enode://<BOOTNODE_ENODE>@bootnode:30301
-    --networkid=1337
-    --unlock=<VALIDATOR_ADDRESS>
-    --password=/data/password.txt
-    --mine
-    --miner.etherbase=<VALIDATOR_ADDRESS>
-    --allow-insecure-unlock
-    --syncmode=full
-    --gcmode=archive
-    --verbosity=3
-```
-
-| Parámetro | Descripción | Valores Recomendados |
-|-----------|-------------|----------------------|
-| `unlock` | Dirección de la cuenta a desbloquear | Dirección del validador |
-| `password` | Archivo con la contraseña para desbloquear | Ruta al archivo de contraseña |
-| `mine` | Activa la validación (minado) | Requerido para validadores |
-| `miner.etherbase` | Cuenta que recibirá recompensas | Misma que `unlock` |
-| `syncmode` | Modo de sincronización | full o archive |
-| `gcmode` | Modo de recolección de basura | archive para histórico completo |
-
-### RPC Node
-
-```yaml
-rpc:
-  image: ethereum/client-go:stable
+node0:
+  image: ethereum/client-go:v1.15.0
   command: >
     --datadir=/data
     --port=30303
@@ -129,17 +126,63 @@ rpc:
     --ws.api=eth,net,web3,txpool,debug
     --syncmode=full
     --verbosity=3
+    --authrpc.addr=0.0.0.0
+    --authrpc.port=8551
+    --authrpc.vhosts=*
+    --authrpc.jwtsecret=/data/jwtsecret
 ```
 
 | Parámetro | Descripción | Valores Recomendados |
 |-----------|-------------|----------------------|
-| `http` | Habilita servidor HTTP-RPC | Requerido para API HTTP |
-| `http.addr` | Dirección de escucha HTTP-RPC | 0.0.0.0 para todos, 127.0.0.1 para local |
-| `http.corsdomain` | Dominios permitidos para CORS | * para desarrollo, lista específica para producción |
-| `http.vhosts` | Hosts virtuales permitidos | * para desarrollo, lista específica para producción |
-| `http.api` | Módulos API habilitados | eth,net,web3 mínimo, añadir más según necesidad |
-| `ws` | Habilita servidor WebSocket | Requerido para eventos |
-| `ws.origins` | Orígenes permitidos para WebSocket | * para desarrollo, lista específica para producción |
+| `authrpc.addr` | Dirección para el Engine API | 0.0.0.0 para todos, 127.0.0.1 para local |
+| `authrpc.port` | Puerto para el Engine API | 8551 (por defecto) |
+| `authrpc.jwtsecret` | Ruta al archivo JWT secret | Debe coincidir con el cliente de consenso |
+
+### Consensus Client (Lighthouse)
+
+```yaml
+beacon:
+  image: sigp/lighthouse:latest
+  command: >
+    lighthouse bn
+    --datadir=/data
+    --network=custom
+    --execution-endpoint=http://node0:8551
+    --execution-jwt=/data/jwtsecret
+    --discovery-port=9000
+    --http
+    --http-address=0.0.0.0
+    --http-port=5052
+    --eth1-endpoints=http://node0:8545
+    --testnet-dir=/config
+    --disable-deposit-contract-sync
+```
+
+| Parámetro | Descripción | Valores Recomendados |
+|-----------|-------------|----------------------|
+| `network` | Red a usar | custom para redes privadas |
+| `execution-endpoint` | URL del nodo de ejecución | http://nombre-del-nodo:8551 |
+| `execution-jwt` | Ruta al JWT secret | Debe coincidir con el nodo de ejecución |
+| `testnet-dir` | Directorio de configuración de la testnet | Donde se encuentra genesis y configs |
+
+### Validator Client (Lighthouse)
+
+```yaml
+validator:
+  image: sigp/lighthouse:latest
+  command: >
+    lighthouse vc
+    --datadir=/data
+    --beacon-nodes=http://beacon:5052
+    --graffiti="tokio-school"
+    --testnet-dir=/config
+    --suggested-fee-recipient=<FEE_RECIPIENT_ADDRESS>
+```
+
+| Parámetro | Descripción | Valores Recomendados |
+|-----------|-------------|----------------------|
+| `beacon-nodes` | URL del nodo beacon | http://beacon:5052 |
+| `suggested-fee-recipient` | Dirección que recibirá las tarifas | Dirección ETH del beneficiario |
 
 ## Configuración del Docker Compose
 
@@ -149,11 +192,11 @@ El archivo `docker-compose.yml` define la configuración de los contenedores Doc
 
 ```yaml
 volumes:
-  - ./bootnode:/data
-  - ./validator:/data
-  - ./node1:/data
-  - ./node2:/data
-  - ./rpc:/data
+  - ./data/node0:/data
+  - ./data/node1:/data
+  - ./data/node2:/data
+  - ./data/rpc:/data
+  - ./consensus-data:/config:ro
 ```
 
 Los volúmenes mapean directorios del host a directorios dentro de los contenedores, permitiendo persistencia de datos.
@@ -189,62 +232,72 @@ deploy:
 
 Añadir esta sección a cualquier servicio para limitar su uso de recursos.
 
-## Variables de Entorno
+## Scripts de Configuración Avanzados
 
-El archivo `.env` (que debe crearse) puede contener variables utilizadas en el `docker-compose.yml`:
+### 1. Generación del JWT Secret
 
-```
-GETH_VERSION=stable
-NETWORK_ID=1337
-BOOTNODE_KEY=<GENERATED_KEY>
-VALIDATOR_ADDRESS=<VALIDATOR_ETH_ADDRESS>
-```
-
-## Scripts de Configuración
-
-### 1. Generador de Genesis
-
-El script `scripts/generate-genesis.sh` puede personalizar el archivo genesis:
+El script `scripts/generate-jwt.sh` genera el secreto JWT compartido:
 
 ```bash
 #!/bin/bash
-# Uso: ./generate-genesis.sh <chain_id> <periodo_bloques> <direccion_validador>
 
-CHAIN_ID=${1:-1337}
-BLOCK_PERIOD=${2:-5}
-VALIDATOR_ADDR=${3:-"0x0000000000000000000000000000000000000000"}
+# Generar secreto JWT
+SECRET=$(openssl rand -hex 32)
+echo "$SECRET" > ./data/node0/jwtsecret
+echo "$SECRET" > ./consensus-data/jwtsecret
 
-# Strip '0x' prefix if present
-VALIDATOR_ADDR=$(echo $VALIDATOR_ADDR | sed 's/^0x//')
-
-cat > genesis.json << EOF
-{
-  "config": {
-    "chainId": $CHAIN_ID,
-    ...
+echo "JWT secret generado y copiado a ambos directorios"
 ```
 
-### 2. Creador de Cuentas
+### 2. Generación de Claves de Validador
 
-El script `scripts/create-account.sh` para generar nuevas cuentas:
+El script `scripts/generate-validator-keys.sh` facilita la creación de claves para validadores:
 
 ```bash
 #!/bin/bash
-# Uso: ./create-account.sh <nodo> <contraseña>
 
-NODE_DIR=${1:-"validator"}
-PASSWORD=${2:-"password"}
+# Configurar directorio y contraseña
+mkdir -p ./consensus-data/validator_keys
+echo "validatorpassword" > ./consensus-data/validator_password.txt
 
-# Crea directorio si no existe
-mkdir -p $NODE_DIR/keystore
-
-# Crea archivo de contraseña
-echo $PASSWORD > $NODE_DIR/password.txt
-
-# Genera nueva cuenta
-docker run --rm -v $(pwd)/$NODE_DIR:/data ethereum/client-go:stable \
-  account new --datadir=/data --password=/data/password.txt
+# Generar claves de depósito y validador
+docker run --rm -it \
+  -v $(pwd)/consensus-data:/data \
+  sigp/lighthouse:latest \
+  lighthouse account validator new \
+  --testnet-dir=/data \
+  --datadir=/data \
+  --password-file=/data/validator_password.txt \
+  --count=4
 ```
+
+## Configuración para Desarrollo sin Cliente de Consenso
+
+Para un entorno de desarrollo simplificado, puede usar Geth en modo PoS pero sin ejecutar un cliente de consenso:
+
+```yaml
+node0:
+  image: ethereum/client-go:v1.15.0
+  command: >
+    --datadir=/data
+    --port=30303
+    --networkid=1337
+    --http
+    --http.addr=0.0.0.0
+    --http.port=8545
+    --http.corsdomain=*
+    --http.vhosts=*
+    --http.api=eth,net,web3,txpool,debug,personal,admin
+    --syncmode=full
+    --verbosity=3
+    --authrpc.addr=0.0.0.0
+    --authrpc.port=8551
+    --authrpc.vhosts=*
+    --authrpc.jwtsecret=/data/jwtsecret
+    --allow-insecure-unlock
+```
+
+Esta configuración permite un nodo Geth en modo PoS sin producción activa de bloques, ideal para pruebas de contratos inteligentes en el bloque génesis.
 
 ## Consideraciones de Rendimiento
 
@@ -257,88 +310,63 @@ docker run --rm -v $(pwd)/$NODE_DIR:/data ethereum/client-go:stable \
 ### Memoria
 
 - **Mínimo**: 4GB por nodo
-- **Recomendado**: 8GB+ para nodos validadores y RPC
+- **Recomendado**: 8GB+ para nodos ejecutores y 6GB+ para nodos de consenso
 - **Cache de Geth**: Ajustar `--cache` según RAM disponible (25% de la RAM total)
 
 ### CPU
 
 - **Mínimo**: 2 cores por nodo
-- **Recomendado**: 4+ cores para validadores
-
-## Configuración para Producción
-
-Para entornos de producción, se recomienda ajustar estos parámetros adicionales:
-
-### Seguridad
-
-```yaml
-rpc:
-  command: >
-    # Configuración base...
-    --http.addr=127.0.0.1
-    --http.vhosts=yourdomain.com
-    --http.corsdomain=https://yourdapp.com
-    --ws.origins=https://yourdapp.com
-    --authrpc.addr=127.0.0.1
-    --authrpc.port=8551
-    --authrpc.vhosts=localhost
-    --ipcdisable
-```
-
-### Alta Disponibilidad
-
-Para configuraciones de alta disponibilidad, considere:
-
-1. **Múltiples nodos RPC** detrás de un balanceador de carga
-2. **Múltiples validadores** con configuración adecuada en el genesis
-3. **Monitorización** con herramientas como Prometheus/Grafana
+- **Recomendado**: 4+ cores para validadores y nodos beacon
 
 ## Resolución de Problemas
 
-### Problemas Comunes de Configuración
+### Problemas Comunes en Configuración PoS
 
 | Problema | Posible Causa | Solución |
 |----------|--------------|----------|
-| Nodos no se conectan | Bootnode inaccesible | Verificar enode correcto y puertos abiertos |
-| Error de genesis | Genesis diferente entre nodos | Reinicializar todos los nodos con el mismo genesis |
-| Validador no mina | Cuenta no desbloqueada | Verificar path de password y dirección correcta |
-| RPC inaccesible | Configuración de firewall | Verificar http.addr y puertos expuestos |
+| Error de JWT | JWT secreto incorrecto o no accesible | Verificar que el mismo JWT secret está en ambos clientes |
+| Cliente de ejecución no sincroniza | Ausencia de cliente de consenso | Iniciar el cliente de consenso o configurar para desarrollo sin consenso |
+| El cliente Beacon no se conecta | Error en Engine API | Verificar que authrpc esté correctamente configurado en Geth |
+| No se producen bloques | Validadores no configurados | Verificar claves de validador y estado de activación |
 
-## Configuración Recomendada por Caso de Uso
+## Referencia Rápida para la Red Tokio School
 
-### Desarrollo y Pruebas
+Para la red Ethereum de Tokio School, se recomienda:
 
-```yaml
-validator:
-  command: >
-    # Configuración base...
-    --dev.period=1
-    --miner.gasprice=0
-    --txpool.pricelimit=0
+- **ChainID**: 1337
+- **Configuración Genesis**: Incluir todos los parámetros PoS necesarios
+- **JWT Secret**: Compartido entre nodos de ejecución y consenso
+- **Modo de Desarrollo**: Configurar la red sin cliente de consenso para facilitar pruebas
+
+## Compatibilidad con Herramientas de Desarrollo
+
+### Hardhat
+
+Para configurar Hardhat con nuestra red privada:
+
+```typescript
+// hardhat.config.ts
+export default {
+  networks: {
+    local: {
+      url: "http://localhost:8545",
+      accounts: [
+        "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", // Cuentas predefinidas
+        // ... otras claves privadas
+      ],
+      chainId: 1337
+    }
+  }
+};
 ```
 
-### Red Privada Corporativa
+### Metamask
 
-```yaml
-validator:
-  command: >
-    # Configuración base...
-    --identity="CompanyValidator"
-    --gcmode=archive
-    --miner.recommit=2s
-    --metrics
-    --metrics.addr=0.0.0.0
-    --metrics.port=6060
-```
+Para conectar Metamask a la red privada:
 
-### Red de Demostración
-
-```yaml
-validator:
-  command: >
-    # Configuración base...
-    --miner.gastarget=6000000
-    --miner.gasprice=1
-    --txpool.accountslots=16
-    --txpool.globalslots=10000
-``` 
+1. Abrir Metamask
+2. Añadir Red
+   - Nombre: Tokio School PoS
+   - URL RPC: http://localhost:8545
+   - ChainID: 1337
+   - Símbolo: ETH 
